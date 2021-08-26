@@ -26,9 +26,9 @@ struct Node{
 };
 
 struct TransPack{
-	struct tm t;
 	int sender, recver;
 	char msg[MAX_MSG_LEN];
+	struct tm t;
 };
 
 class SocketServer{

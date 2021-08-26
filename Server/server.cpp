@@ -10,6 +10,6 @@
 
 int main(){
 	SocketServer server;
-    server.init();
+    server.init("192.168.31.186");
     return 0;
 }

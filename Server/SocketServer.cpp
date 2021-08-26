@@ -63,13 +63,13 @@ void* SocketServer::transmit(void* args){
 	while(1){
 		usleep(1e4);
 		memset(pack.msg, 0, sizeof(pack.msg));
-		int ret = read(node.connfd, (char*)&pack, sizeof(pack));
+		int ret = recv(node.connfd, (char*)&pack, sizeof(pack), 0);
         if (ret > 0){
 			printf("receive \"%s\" | form %d to %d at %s\n", pack.msg, pack.sender, pack.recver, asctime(&pack.t));
 			Node recv_node;
 			if (pack.recver >= 0){
 				if (SearchInPool(pack.recver, recv_node)){ // receiver online
-					int ret = write(recv_node.connfd, (char*)&pack, sizeof(pack));
+					int ret = send(recv_node.connfd, (char*)&pack, sizeof(pack), 0);
 					if (ret > 0){
 						printf("send \"%s\" | form %d to %d at %s\n", pack.msg, pack.sender, pack.recver, asctime(&pack.t));
 					}
@@ -111,7 +111,7 @@ void* SocketServer::connect(void* args){
 		bool connected = false;
 		while(true){
 			usleep(1e4);
-			int ret = read(node.connfd, (char*)&pack, sizeof(pack));
+			int ret = recv(node.connfd, (char*)&pack, sizeof(pack), 0);
 			if (ret > 0){
 				printf("receive request \"%s\" | form %d to %d at %s\n", pack.msg, pack.sender, pack.recver, asctime(&pack.t));
 				if (pack.recver == -1){
@@ -127,7 +127,7 @@ void* SocketServer::connect(void* args){
 		}
 		if (!connected)continue;
 		pack.sender = -1;
-		int ret = write(node.connfd, (char*)&pack, sizeof(pack));
+		int ret = send(node.connfd, (char*)&pack, sizeof(pack), 0);
 		if (ret <= 0){
 			printf("### failed to send check signal. %d\n", node.connfd);
 			continue;
@@ -141,7 +141,7 @@ void* SocketServer::connect(void* args){
 		if (SearchInQueue(node.account, iter)){
 			while(!iter->empty()){
 				pack = iter->front();
-				int ret = write(node.connfd, (char*)&pack, sizeof(pack));
+				int ret = send(node.connfd, (char*)&pack, sizeof(pack), 0);
 				if (ret > 0){
 					printf("send \"%s\" | form %d to %d at %s\n", pack.msg, pack.sender, pack.recver, asctime(&pack.t));
 					iter->pop_front();

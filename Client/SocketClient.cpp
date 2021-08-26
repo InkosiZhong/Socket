@@ -10,7 +10,8 @@ void* SocketClient::receive(void* args){
 	while(1){
 		usleep(1e4);
 		memset(pack.msg, 0, strlen(pack.msg) + 1);
-		int ret = read(targs.connfd, (char*)&pack, sizeof(pack));
+		//int ret = read(targs.connfd, (char*)&pack, sizeof(pack));
+		int ret = recv(targs.connfd, (char*)&pack, sizeof(pack), 0);
         if (ret > 0){
 			printf("receive form %d: %s ｜ %s\n", pack.sender, pack.msg, asctime(&pack.t));
 			if (!targs.connected && pack.sender == -1){
@@ -76,7 +77,8 @@ void* SocketClient::send(void* args){
 		if (m_log)printf("### waiting for response...\n");
 		memset(pack.msg, 0, strlen(pack.msg) + 1);
 		pack.recver = -1;
-		int ret = write(targs.connfd, (char*)&pack, sizeof(pack));
+		//int ret = write(targs.connfd, (char*)&pack, sizeof(pack));
+		int ret = ::send(targs.connfd, (char*)&pack, sizeof(pack), 0);
 		if (ret < 0){
 			if (m_log)printf("### Failed to send account(%d)\n", ret);
 			break;
@@ -92,7 +94,8 @@ void* SocketClient::send(void* args){
 		while (!send_buffer.empty()){
 			pack = send_buffer.front(); 
 			send_buffer.pop_front();
-			int ret = write(targs.connfd, (char*)&pack, sizeof(pack));
+			//int ret = write(targs.connfd, (char*)&pack, sizeof(pack));
+			int ret = ::send(targs.connfd, (char*)&pack, sizeof(pack),0);
 			if (ret < 0) {
 				if (m_log)printf("### Failed to send message(%d)\n", ret);
 				targs.connected = false;

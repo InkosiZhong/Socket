@@ -15,7 +15,7 @@ int main(int argc, char* argv[]){
 	if (argc > 2)log = atoi(argv[2]);
 	SocketClient client(log);
 	client.init(account);
-	client.connect();
+	client.connect("192.168.31.186");
 	int recver;
 	char msg[MAX_MSG_LEN];
 	while(client.isConnected()){
