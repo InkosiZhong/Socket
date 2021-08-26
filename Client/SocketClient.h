@@ -44,13 +44,6 @@ public:
 	SocketClient(bool log = true);
 	~SocketClient();
 
-	/** init - debug
-	 * @brief 初始化账户，无数据库debug使用
-	 * @param account: int 非负账户
-	 * @return bool 是否初始化成功
-	*/
-	bool init(int account);
-
 	/** connect
 	 * @brief 建立Socket连接
 	 * @param ip: const char*("127.0.0.1") 服务器ip

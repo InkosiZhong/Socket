@@ -68,6 +68,7 @@ void* SocketServer::transmit(void* args){
 			printf("receive \"%s\" | form %d to %d at %s\n", pack.msg, pack.sender, pack.recver, asctime(&pack.t));
 			Node recv_node;
 			if (pack.recver >= 0){
+				// TODO save into DB
 				if (SearchInPool(pack.recver, recv_node)){ // receiver online
 					int ret = send(recv_node.connfd, (char*)&pack, sizeof(pack), 0);
 					if (ret > 0){
@@ -109,11 +110,12 @@ void* SocketServer::connect(void* args){
 		TransPack pack;
 		/* waiting for account set */
 		bool connected = false;
-		while(true){
+		while(!connected){
 			usleep(1e4);
 			int ret = recv(node.connfd, (char*)&pack, sizeof(pack), 0);
 			if (ret > 0){
 				printf("receive request \"%s\" | form %d to %d at %s\n", pack.msg, pack.sender, pack.recver, asctime(&pack.t));
+				// TODO check account and password
 				if (pack.recver == -1){
 					node.account = pack.sender;
 					connected = true;
@@ -127,6 +129,7 @@ void* SocketServer::connect(void* args){
 		}
 		if (!connected)continue;
 		pack.sender = -1;
+		// TODO send Me and Friend List
 		int ret = send(node.connfd, (char*)&pack, sizeof(pack), 0);
 		if (ret <= 0){
 			printf("### failed to send check signal. %d\n", node.connfd);
@@ -136,7 +139,8 @@ void* SocketServer::connect(void* args){
 
 		usleep(1e6);
 
-		/* Get offline MSG */
+		/* Get offline Message and Transaction */
+		// TODO SearchInDB
 		std::list< std::list<TransPack> >::iterator iter;
 		if (SearchInQueue(node.account, iter)){
 			while(!iter->empty()){

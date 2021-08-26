@@ -126,11 +126,6 @@ SocketClient::~SocketClient(){
 #endif
 }
 
-bool SocketClient::init(int account){
-	args.account = account;
-	return true;
-}
-
 bool SocketClient::connect(const char* ip, const int port){
 	int ret = 0;
 #if defined(_WIN32)
