@@ -23,6 +23,7 @@ enum Order{FRONT, BACK};
 #include <list>
 
 struct TransPack{
+	int id;
 	int sender, recver;
 	char msg[MAX_MSG_LEN];
 	struct tm t;
