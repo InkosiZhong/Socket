@@ -1,23 +1,32 @@
 #ifndef SOCKETCLIENT_H_
 #define SOCKETCLIENT_H_
+#define WIN32
 
 #define MAX_MSG_LEN 1024
 
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#ifdef __linux__
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
-#include <time.h>
 #include <pthread.h>
+#endif
+#ifdef WIN32
+#include <winsock2.h>
+#include <windows.h>
+#include <thread> // c++11
+#pragma comment(lib, "ws2_32.lib")
+#endif
+#include <time.h>
 #include <list>
 
 struct TransPack{
-	struct tm t;
 	int sender, recver;
 	char msg[MAX_MSG_LEN];
+	struct tm t;
 };
 
 struct Args{
@@ -39,11 +48,16 @@ public:
 	bool isConnected();
 
 private:
-	static void* receive(void* args);
-	static void* send(void* args);
+	static void* _receive(void* args);
+	static void* _send(void* args);
 
 private:
+#ifdef __linux__
 	pthread_t recv_thread, send_thread;
+#endif
+#ifdef WIN32
+	std::thread recv_thread, send_thread;
+#endif
 	Args args;
 	static bool m_log;
 	static std::list<TransPack> send_buffer, recv_buffer;

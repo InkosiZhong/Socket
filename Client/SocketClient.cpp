@@ -4,13 +4,17 @@ bool SocketClient::m_log = true;
 std::list<TransPack> SocketClient::send_buffer = std::list<TransPack>();
 std::list<TransPack> SocketClient::recv_buffer = std::list<TransPack>();
 
-void* SocketClient::receive(void* args){
+void* SocketClient::_receive(void* args){
 	Args& targs = *(Args*)args;
 	TransPack pack;
 	while(1){
-		usleep(1e4);
 		memset(pack.msg, 0, strlen(pack.msg) + 1);
-		//int ret = read(targs.connfd, (char*)&pack, sizeof(pack));
+#ifdef __linux__
+		usleep(1e4); // us
+#endif
+#ifdef WIN32
+		Sleep(10); // ms
+#endif
 		int ret = recv(targs.connfd, (char*)&pack, sizeof(pack), 0);
         if (ret > 0){
 			printf("receive form %d: %s ｜ %s\n", pack.sender, pack.msg, asctime(&pack.t));
@@ -31,7 +35,12 @@ void* SocketClient::receive(void* args){
 		}
 	}
 	targs.connected = false;
+#if __linux__
 	pthread_exit(NULL);
+#endif
+#ifdef WIN32
+	return NULL;
+#endif
 }
 
 bool SocketClient::send(int recver, const char* msg){
@@ -67,17 +76,25 @@ int SocketClient::get(std::list<TransPack>& list){
 	return size;
 }
 
-void* SocketClient::send(void* args){
+void* SocketClient::_send(void* args){
 	Args& targs = *(Args*)args;
 	TransPack pack;
 	pack.sender = targs.account;
 	/* transmit account */
 	while(!targs.connected){
-		usleep(1e5);
 		if (m_log)printf("### waiting for response...\n");
 		memset(pack.msg, 0, strlen(pack.msg) + 1);
 		pack.recver = -1;
-		//int ret = write(targs.connfd, (char*)&pack, sizeof(pack));
+#if __linux__
+		usleep(1e5);
+#endif
+#ifdef WIN32
+		Sleep(100);
+#endif
+		time_t timer;
+		time(&timer);
+		pack.t = *localtime(&timer);
+		printf("send form %d to %d: %s | %s\n", pack.sender, pack.recver, pack.msg, asctime(&pack.t));
 		int ret = ::send(targs.connfd, (char*)&pack, sizeof(pack), 0);
 		if (ret < 0){
 			if (m_log)printf("### Failed to send account(%d)\n", ret);
@@ -90,12 +107,16 @@ void* SocketClient::send(void* args){
 	}
 	if (m_log)printf("### Connection established with server\n");
 	while(targs.connected){
+#if __linux__
 		usleep(1e4);
+#endif
+#ifdef WIN32
+		Sleep(10);
+#endif
 		while (!send_buffer.empty()){
 			pack = send_buffer.front(); 
 			send_buffer.pop_front();
-			//int ret = write(targs.connfd, (char*)&pack, sizeof(pack));
-			int ret = ::send(targs.connfd, (char*)&pack, sizeof(pack),0);
+			int ret = ::send(targs.connfd, (char*)&pack, sizeof(pack), 0);
 			if (ret < 0) {
 				if (m_log)printf("### Failed to send message(%d)\n", ret);
 				targs.connected = false;
@@ -108,15 +129,26 @@ void* SocketClient::send(void* args){
 			}
 		}
 	}
-    pthread_exit(NULL);
+#ifdef __linux__
+	pthread_exit(NULL);
+#endif
+#ifdef WIN32
+	return NULL;
+#endif
 }
 
 SocketClient::SocketClient(bool log) { m_log = log; }
 
 SocketClient::~SocketClient(){
+#ifdef __linux__
 	pthread_cancel(recv_thread);
 	pthread_cancel(send_thread);
 	close(args.connfd);
+#endif
+#ifdef WIN32
+	closesocket(args.connfd);
+	WSACleanup();
+#endif
 }
 
 bool SocketClient::init(int account){
@@ -125,6 +157,14 @@ bool SocketClient::init(int account){
 }
 
 bool SocketClient::connect(const char* ip, const int port){
+#ifdef WIN32
+	WSADATA wsaData;
+	int ret = WSAStartup(MAKEWORD(2, 2), &wsaData);
+	if (ret != 0) {
+		printf("Failed to load Winsock\n");
+		return false;
+	}
+#endif
 	//创建套接字
     args.connfd = socket(AF_INET, SOCK_STREAM, 0);
 
@@ -135,7 +175,10 @@ bool SocketClient::connect(const char* ip, const int port){
     serv_addr.sin_addr.s_addr = inet_addr(ip);  //具体的IP地址
     serv_addr.sin_port = htons(port);  //端口
     ::connect(args.connfd, (struct sockaddr*)&serv_addr, sizeof(serv_addr));
+	
+	args.connected = false;
 
+#ifdef __linux__
 	int ret = pthread_create(&recv_thread, NULL, receive, (void*)&(args));
 	if (ret != 0) {
 		if (m_log)printf("### pthread_create for recv_thread error: error_code = %d\n", ret);
@@ -148,6 +191,13 @@ bool SocketClient::connect(const char* ip, const int port){
 		return false;
 	}
     pthread_detach(send_thread);
+#endif
+#ifdef WIN32
+	recv_thread = std::thread(_receive, &args);
+	send_thread = std::thread(_send, &args);
+	recv_thread.detach();
+	send_thread.detach();
+#endif
 	while(!args.connected);
 	//while(args.connected);
 	return true;
