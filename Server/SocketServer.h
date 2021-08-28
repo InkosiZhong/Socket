@@ -1,11 +1,6 @@
 #ifndef SOCKETSERVER_H_
 #define SOCKETSERVER_H_
 
-#define MAX_MSG_LEN 1024
-#define MAX_ACCOUNTS 1024
-#define MAX_WAIT_MSG 32
-#define MAX_WAIT_TIME 5
-
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -18,18 +13,13 @@
 #include <list>
 #include <iostream>
 
+#include "../DB/DBController.h"
+
 struct Node{
 	int connfd;
 	int account;
 	pthread_t trans_thread;
 	struct sockaddr_in sock_in;
-};
-
-struct TransPack{
-	int id;
-	int sender, recver;
-	char msg[MAX_MSG_LEN];
-	struct tm t;
 };
 
 class SocketServer{
@@ -53,7 +43,7 @@ private:
 	pthread_t conn_thread;
 	static std::list<Node> g_conn_pool;
 	static std::list< std::list<TransPack> > g_msg_queue;
-
+	static DBController m_dbcontroller;
 };
 
 #endif // !SOCKETSERVER_H_

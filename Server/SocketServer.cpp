@@ -3,6 +3,7 @@
 int SocketServer::m_servfd = -1;
 std::list<Node> SocketServer::g_conn_pool = std::list<Node>();
 std::list< std::list<TransPack> > SocketServer::g_msg_queue = std::list< std::list<TransPack> >();
+DBController SocketServer::m_dbcontroller = DBController();
 
 bool SocketServer::SearchInPool(int account, Node& node){
 	std::list<Node>::iterator iter = g_conn_pool.begin();
@@ -65,11 +66,61 @@ void* SocketServer::transmit(void* args){
 		memset(pack.msg, 0, sizeof(pack.msg));
 		int ret = recv(node.connfd, (char*)&pack, sizeof(pack), 0);
         if (ret > 0){
-			printf("receive \"%s\" | form %d to %d at %s\n", pack.msg, pack.sender, pack.recver, asctime(&pack.t));
+			printf("receive(id=%d) \"%s\" | form %d to %d at %s\n", pack.id, pack.msg, pack.sender, pack.recver, asctime(&pack.t));
 			Node recv_node;
-			if (pack.recver >= 0){
-				// TODO save into DB
-				if (SearchInPool(pack.recver, recv_node)){ // receiver online
+			if (pack.id >= 0){
+				if (pack.recver == SERVER_IDX){ // apply for records
+					std::list<TransPack> list;
+					if (!m_dbcontroller.getRecords(pack.sender, atoi(pack.msg), pack.id, list, 10)){
+						printf("### failed in getRecords\n");
+					}
+					recv_node = node;
+					while (!list.empty()){
+						int ret = send(recv_node.connfd, (char*)&(list.front()), sizeof(TransPack), 0);
+						if (ret > 0){
+							printf("send \"%s\" | form %d to %d at %s\n", pack.msg, pack.sender, pack.recver, asctime(&pack.t));
+						}
+						else if (ret == 0)break;
+						else printf("### Failed to send message(%d)\n", ret);
+						list.pop_front();
+					}
+					if (ret <= 0)break;
+				}
+				else { // transmit
+					m_dbcontroller.createRecord(pack);
+					if (SearchInPool(pack.recver, recv_node)){
+						int ret = send(recv_node.connfd, (char*)&pack, sizeof(pack), 0);
+						if (ret > 0){
+							printf("send \"%s\" | form %d to %d at %s\n", pack.msg, pack.sender, pack.recver, asctime(&pack.t));
+						}
+						else if (ret == 0)break;
+						else printf("### Failed to send message(%d)\n", ret);
+					}
+				}
+			}
+			else if (pack.id == D_FILE_PACK){ // TODO write url into DB
+				if (SearchInPool(pack.recver, recv_node)){
+					int ret = send(recv_node.connfd, (char*)&pack, sizeof(pack), 0);
+					if (ret > 0){
+						printf("send img pack | form %d to %d at %s\n", pack.sender, pack.recver, asctime(&pack.t));
+					}
+					else if (ret == 0)break;
+					else printf("### Failed to send image pack(%d)\n", ret);
+				}
+			}
+			else if (pack.id == D_FILE_END){
+				if (SearchInPool(pack.recver, recv_node)){
+					int ret = send(recv_node.connfd, (char*)&pack, sizeof(pack), 0);
+					if (ret > 0){
+						printf("send %s| form %d to %d at %s\n", pack.msg, pack.sender, pack.recver, asctime(&pack.t));
+					}
+					else if (ret == 0)break;
+					else printf("### Failed to send image end(%d)\n", ret);
+				}
+			}
+			else if (pack.id == R_APPLICANT){
+				m_dbcontroller.createFriendLinkRequest(pack); // add request_id
+				if (SearchInPool(pack.recver, recv_node)){ // send to target
 					int ret = send(recv_node.connfd, (char*)&pack, sizeof(pack), 0);
 					if (ret > 0){
 						printf("send \"%s\" | form %d to %d at %s\n", pack.msg, pack.sender, pack.recver, asctime(&pack.t));
@@ -77,9 +128,37 @@ void* SocketServer::transmit(void* args){
 					else if (ret == 0)break;
 					else printf("### Failed to send message(%d)\n", ret);
 				}
-				else { // offline
-					HangUpMsg(pack.recver, pack);
+			}
+			else if (pack.id == R_REPLY){
+				m_dbcontroller.replyFriendLinkRequest(pack);
+				// Get Friend List
+				std::list<TransPack> list;
+				m_dbcontroller.getFriends(node.account, list);
+				while (!list.empty()){
+					int ret = send(node.connfd, (char*)&(list.front()), sizeof(TransPack), 0);
+					if (ret <= 0){
+						printf("### failed to send friend list. %d\n", node.connfd);
+						break;
+					}
+					list.pop_front();
 				}
+				if (SearchInPool(pack.recver, recv_node)){ // send to app_account
+					m_dbcontroller.getFriends(recv_node.account, list);
+					while (!list.empty()){
+						int ret = send(recv_node.connfd, (char*)&(list.front()), sizeof(TransPack), 0);
+						if (ret <= 0){
+							printf("### failed to send friend list. %d\n", node.connfd);
+							break;
+						}
+						list.pop_front();
+					}
+				}
+			}
+			else if (pack.id == R_UPDATEPWD){
+				m_dbcontroller.updatePWD(pack);
+			}
+			else if (pack.id == R_UPDATEALIAS){
+				m_dbcontroller.updateAlias(pack);
 			}
 		}
 		else if (ret == 0)break;
@@ -115,9 +194,21 @@ void* SocketServer::connect(void* args){
 			int ret = recv(node.connfd, (char*)&pack, sizeof(pack), 0);
 			if (ret > 0){
 				printf("receive request \"%s\" | form %d to %d at %s\n", pack.msg, pack.sender, pack.recver, asctime(&pack.t));
-				// TODO check account and password
-				if (pack.recver == -1){
-					node.account = pack.sender;
+				if (pack.id == R_LOGIN){
+					if (m_dbcontroller.login(pack) && strcmp(pack.msg, "") != 0){
+						node.account = pack.recver;
+						connected = true;
+						break;
+					}
+					else{
+						printf("login Failed\n");
+						int ret = send(node.connfd, (char*)&pack, sizeof(pack), 0);
+						if (ret <= 0)break;
+					}
+				}
+				else if (pack.id == R_REGISTER){
+					m_dbcontroller.createAccount(pack);
+					node.account = pack.recver;
 					connected = true;
 					break;
 				}
@@ -128,8 +219,6 @@ void* SocketServer::connect(void* args){
 			}
 		}
 		if (!connected)continue;
-		pack.sender = -1;
-		// TODO send Me and Friend List
 		int ret = send(node.connfd, (char*)&pack, sizeof(pack), 0);
 		if (ret <= 0){
 			printf("### failed to send check signal. %d\n", node.connfd);
@@ -139,8 +228,45 @@ void* SocketServer::connect(void* args){
 
 		usleep(1e6);
 
+		// Get Friend List
+		std::list<TransPack> list;
+		m_dbcontroller.getFriends(node.account, list);
+		while (!list.empty()){
+			int ret = send(node.connfd, (char*)&(list.front()), sizeof(TransPack), 0);
+			if (ret <= 0){
+				printf("### failed to send friend list. %d\n", node.connfd);
+				break;
+			}
+			list.pop_front();
+		}
+		if (ret <= 0)continue;
+
 		/* Get offline Message and Transaction */
-		// TODO SearchInDB
+		// Search in DB
+		m_dbcontroller.getUnreadRecords(node.account, list);
+		while (!list.empty()){
+			int ret = send(node.connfd, (char*)&(list.front()), sizeof(TransPack), 0);
+			if (ret <= 0){
+				printf("### failed to send history records. %d\n", node.connfd);
+				break;
+			}
+			m_dbcontroller.setRecordRead(list.front().id);
+			list.pop_front();
+		}
+		if (ret <= 0)continue;
+
+		m_dbcontroller.getFriendLinkRequests(node.account, list);
+		while (!list.empty()){
+			int ret = send(node.connfd, (char*)&(list.front()), sizeof(TransPack), 0);
+			if (ret <= 0){
+				printf("### failed to send friend link requests. %d\n", node.connfd);
+				break;
+			}
+			list.pop_front();
+		}
+		if (ret <= 0)continue;
+		
+		/* Search in Queue
 		std::list< std::list<TransPack> >::iterator iter;
 		if (SearchInQueue(node.account, iter)){
 			while(!iter->empty()){
@@ -153,7 +279,7 @@ void* SocketServer::connect(void* args){
 				else if (ret == 0)break;
 				else printf("### Failed to send message(%d)\n", ret);
 			}
-		}
+		}*/
 
 		ret = pthread_create(&node.trans_thread, NULL, transmit, (void*)&(node));
 		if (ret != 0) {

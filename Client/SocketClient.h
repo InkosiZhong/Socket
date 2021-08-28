@@ -3,6 +3,9 @@
 
 #define MAX_MSG_LEN 1024
 enum Order{FRONT, BACK};
+enum REQUEST_CODE{R_REGISTER = -1, R_LOGIN = -2, R_APPLICANT = -3, R_REPLY = -4, R_UPDATEPWD = -5, R_UPDATEALIAS = -6};
+enum DATA_CODE{D_ME = -11, D_FRIEND = -22, D_FILE_PACK = -33, D_FILE_END = -44};
+#define SERVER_IDX -1
 
 #include <stdio.h>
 #include <string.h>
