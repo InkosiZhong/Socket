@@ -131,23 +131,38 @@ void* SocketServer::transmit(void* args){
 			}
 			else if (pack.id == R_REPLY){
 				m_dbcontroller.replyFriendLinkRequest(pack);
-				// Get Friend List
-				std::list<TransPack> list;
-				m_dbcontroller.getFriends(node.account, list);
-				while (!list.empty()){
-					int ret = send(node.connfd, (char*)&(list.front()), sizeof(TransPack), 0);
-					if (ret <= 0){
-						printf("### failed to send friend list. %d\n", node.connfd);
-						break;
-					}
-					list.pop_front();
-				}
-				if (SearchInPool(pack.recver, recv_node)){ // send to app_account
-					m_dbcontroller.getFriends(recv_node.account, list);
+				int request_id, state;
+				request_id = atoi(strtok(pack.msg, "/"));
+				state = atoi(strtok(NULL, "/"));
+				if (state == 1){ // accept
+					// Get Friend List
+					std::list<TransPack> list;
+					m_dbcontroller.getFriends(node.account, list);
 					while (!list.empty()){
-						int ret = send(recv_node.connfd, (char*)&(list.front()), sizeof(TransPack), 0);
+						int ret = send(node.connfd, (char*)&(list.front()), sizeof(TransPack), 0);
 						if (ret <= 0){
 							printf("### failed to send friend list. %d\n", node.connfd);
+							break;
+						}
+						list.pop_front();
+					}
+					if (SearchInPool(pack.recver, recv_node)){ // send to app_account
+						m_dbcontroller.getFriends(recv_node.account, list);
+						while (!list.empty()){
+							int ret = send(recv_node.connfd, (char*)&(list.front()), sizeof(TransPack), 0);
+							if (ret <= 0){
+								printf("### failed to send friend list. %d\n", node.connfd);
+								break;
+							}
+							list.pop_front();
+						}
+					}
+				}
+				else if (state == -1) { //reject
+					if (SearchInPool(pack.recver, recv_node)){ // send to app_account
+						int ret = send(recv_node.connfd, (char*)&(pack), sizeof(pack), 0);
+						if (ret <= 0){
+							printf("### failed to send app failed pack. %d\n", node.connfd);
 							break;
 						}
 						list.pop_front();
@@ -156,6 +171,11 @@ void* SocketServer::transmit(void* args){
 			}
 			else if (pack.id == R_UPDATEPWD){
 				m_dbcontroller.updatePWD(pack);
+				int ret = send(node.connfd, (char*)&(pack), sizeof(pack), 0);
+				if (ret <= 0){
+					printf("### failed to send pwd change result. %d\n", node.connfd);
+					break;
+				}
 			}
 			else if (pack.id == R_UPDATEALIAS){
 				m_dbcontroller.updateAlias(pack);
